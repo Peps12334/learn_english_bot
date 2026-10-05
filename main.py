@@ -1,25 +1,33 @@
 from confiq import BOT_TOKEN
-from words_list import word_list
-from aiogram import Bot, Dispatcher, F, Router
-from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.context import FSMContext
-import logging
-import random
+from aiogram import Bot, Dispatcher
 from handlers import router
+import logging
+import asyncio
+import sys
+
+print("=== БОТ ЗАПУСКАЕТСЯ ===", flush=True)
+print(f"Токен получен: {bool(BOT_TOKEN)}", flush=True)
 
 bot = Bot(token=str(BOT_TOKEN))
 dp = Dispatcher()
 
 async def main():
+    print("=== ВХОД В main() ===", flush=True)
     dp.include_router(router)
+    
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("=== Webhook удалён, начинаю polling ===", flush=True)
+    
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     try:
-        import asyncio
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass
+    except Exception as e:
+        print(f"=== КРИТИЧЕСКАЯ ОШИБКА: {e} ===", flush=True)
+        raise
