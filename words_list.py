@@ -25,3 +25,5 @@ word_list = {
     "yellow": "желтый",
     "zoo": "зоопарк"
 }
+hard_words = {}
+easy_words = word_list

@@ -1,5 +1,5 @@
 from confiq import BOT_TOKEN
-from words_list import word_list
+from words_list import word_list, hard_words, easy_words
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.types import Message
 from aiogram.filters import CommandStart, Command
@@ -10,8 +10,10 @@ import random
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 import keyboard as kb
-from aiogram.utils.formatting import Pre
+import math
 
+right_words = 0
+wrong_words = 0
 
 router = Router()
 
@@ -31,26 +33,35 @@ async def start(message:Message):
 
 @router.message(F.text == 'Слово')
 async def word(message:Message, state: FSMContext):
-    random_word = random.choice(list(word_list.keys()))
+    mark = random.randint(1, 3)
+    if mark != 1:
+        random_word = random.choice(list(easy_words.keys()))
+    else:
+        random_word = random.choice(list(hard_words.keys()))
     await state.update_data(current_word = random_word)
     await message.answer(random_word)
     await state.set_state(Ans.users_word)
 
 @router.message(Ans.users_word)
 async def users_ans(message:Message, state:FSMContext):
+    global right_words, wrong_words
     data = await state.get_data()
     en_word = data.get("current_word")
     correct_ru_word = word_list[en_word]
     user_answer = message.text.strip().lower()
     if user_answer == correct_ru_word:
+        right_words += 1
+        easy_words[en_word] = correct_ru_word
         await message.answer('Правильно!', reply_markup=kb.main)
     else:
+        wrong_words += 1
+        hard_words[en_word] = correct_ru_word
         await message.answer(f'Неправильно, правильный перевод - "{correct_ru_word}"', reply_markup=kb.main)
-
     await state.clear()
 
 @router.message(F.text == 'Список всех слов')
 async def show_word_list(message:Message):
+    print(hard_words, easy_words)
     textik = '\n'.join([f'{key} — {value}' for key, value in word_list.items()])
     await message.answer(textik, reply_markup=kb.main)
 
@@ -73,9 +84,8 @@ async def add_word3(message:Message, state:FSMContext):
     english_new_word = data.get('new_word_en')
     russian_new_word = data.get('new_word_ru')
     word_list[english_new_word] = russian_new_word
-    await message.answer('Новое слово успешно добавлено!')
+    await message.answer('Новое слово успешно добавлено!', reply_markup=kb.main)
 
-
-@router.message()
-async def kal(message:Message):
-    await message.answer("Я получил твоё сообщение")
+@router.message(F.text == 'Статистика')
+async def stats(message:Message):
+    await message.answer(f'Количество правильных ответов: {right_words}\nКоличество неправильных ответов: {wrong_words}\nПроцент верных ответов: {math.trunc(right_words/(right_words+wrong_words)*100)}%', reply_markup=kb.main)
