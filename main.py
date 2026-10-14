@@ -1,18 +1,16 @@
 from confiq import BOT_TOKEN
-from words_list import word_list
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.context import FSMContext
 import logging
-import random
 from handlers import router
+from database import init_db
+from middlewares import DbSessionMiddleware
 
 bot = Bot(token=str(BOT_TOKEN))
 dp = Dispatcher()
 
 async def main():
+    await init_db()
+    dp.update.middleware(DbSessionMiddleware())
     dp.include_router(router)
     await dp.start_polling(bot)
 

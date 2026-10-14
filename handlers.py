@@ -1,6 +1,7 @@
 from confiq import BOT_TOKEN
 from words_list import word_list, hard_words, easy_words
-from aiogram import Bot, Dispatcher, F, Router
+from models import Word, User
+from aiogram import F, Router
 from aiogram.types import Message
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.state import StatesGroup, State
@@ -11,6 +12,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 import keyboard as kb
 import math
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+
 
 right_words = 0
 wrong_words = 0
@@ -27,27 +31,40 @@ class Add_word(StatesGroup):
 def save_word_to_file(en_word: str, ru_word: str):
     word_list[en_word] = ru_word
 
+
+
+async def get_or_create_user(session: AsyncSession, telegram_id: int) -> User:
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(telegram_id=telegram_id)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+    return user
+
+
+
 @router.message(CommandStart())
 async def start(message:Message):
     await message.answer("Привет, я бот, который поможет тебе выучить английский!", reply_markup=kb.main)
 
 @router.message(F.text == 'Слово')
-async def word(message:Message, state: FSMContext):
-    mark = random.randint(1, 3)
-    if mark != 1:
-        random_word = random.choice(list(easy_words.keys()))
-    else:
-        random_word = random.choice(list(hard_words.keys()))
-    await state.update_data(current_word = random_word)
-    await message.answer(random_word)
+async def word(message:Message, state: FSMContext, session: AsyncSession):
+    result = await session.execute(select(Word))
+    word_list_db = result.scalars().all()
+    random_word = random.choice(word_list_db)
+    await state.update_data(current_word_id = random_word.id)
+    await message.answer(random_word.en)
     await state.set_state(Ans.users_word)
-
+    
 @router.message(Ans.users_word)
-async def users_ans(message:Message, state:FSMContext):
-    global right_words, wrong_words
+async def users_ans(message:Message, state:FSMContext, session: AsyncSession):
+    result = await session.execute(select(Word))
+    word_list_db = result.scalars().all()
     data = await state.get_data()
     en_word = data.get("current_word")
-    correct_ru_word = word_list[en_word]
+    correct_ru_word = word_list_db.ru  
     user_answer = message.text.strip().lower()
     if user_answer == correct_ru_word:
         right_words += 1
@@ -60,9 +77,10 @@ async def users_ans(message:Message, state:FSMContext):
     await state.clear()
 
 @router.message(F.text == 'Список всех слов')
-async def show_word_list(message:Message):
-    print(hard_words, easy_words)
-    textik = '\n'.join([f'{key} — {value}' for key, value in word_list.items()])
+async def show_word_list(message:Message, session: AsyncSession):
+    result = await session.execute(select(Word))
+    word_list_db = result.scalars().all()
+    textik = '\n'.join([f'{key} — {value}' for key, value in word_list_db.items()])
     await message.answer(textik, reply_markup=kb.main)
 
 
@@ -89,3 +107,4 @@ async def add_word3(message:Message, state:FSMContext):
 @router.message(F.text == 'Статистика')
 async def stats(message:Message):
     await message.answer(f'Количество правильных ответов: {right_words}\nКоличество неправильных ответов: {wrong_words}\nПроцент верных ответов: {math.trunc(right_words/(right_words+wrong_words)*100)}%', reply_markup=kb.main)
+    

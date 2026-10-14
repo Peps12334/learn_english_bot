@@ -11,6 +11,9 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     use: Mapped[str] = mapped_column(String(100), nullable=True)
 
-engine = create_engine('sqlite:///mydatabase.db', echo=False)
+class Word(Base):
+    __tablename__ = "words"
 
-Base.metadata.create_all(engine)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    en: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    ru: Mapped[str] = mapped_column(String(100))
