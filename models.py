@@ -1,15 +1,16 @@
-from sqlalchemy import BigInteger, String, Boolean, ForeignKey, DateTime, func, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from datetime import datetime
-from words_list import word_list
-class Base(DeclarativeBase):
-    pass
+from sqlalchemy import BigInteger, String, Integer, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
+from database import Base
+
 
 class User(Base):
-    __tablename__ = 'users'
-    id: Mapped[int] = mapped_column(primary_key= True)
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    use: Mapped[str] = mapped_column(String(100), nullable=True)
+    right_answers: Mapped[int] = mapped_column(Integer, default=0)
+    wrong_answers: Mapped[int] = mapped_column(Integer, default=0)
+
 
 class Word(Base):
     __tablename__ = "words"
@@ -17,3 +18,4 @@ class Word(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     en: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     ru: Mapped[str] = mapped_column(String(100))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete='CASCADE'))

@@ -46,41 +46,48 @@ async def get_or_create_user(session: AsyncSession, telegram_id: int) -> User:
 
 
 @router.message(CommandStart())
-async def start(message:Message):
+async def start(message:Message, session: AsyncSession):
+    await get_or_create_user(session, message.from_user.id)
     await message.answer("Привет, я бот, который поможет тебе выучить английский!", reply_markup=kb.main)
 
 @router.message(F.text == 'Слово')
 async def word(message:Message, state: FSMContext, session: AsyncSession):
     result = await session.execute(select(Word))
-    word_list_db = result.scalars().all()
-    random_word = random.choice(word_list_db)
+    words = result.scalars().all()
+    if not words:
+        await message.answer("В базе нет слов. Добавь первое через «Добавить слово».")
+        return
+    random_word = random.choice(words)
     await state.update_data(current_word_id = random_word.id)
     await message.answer(random_word.en)
     await state.set_state(Ans.users_word)
     
 @router.message(Ans.users_word)
 async def users_ans(message:Message, state:FSMContext, session: AsyncSession):
-    result = await session.execute(select(Word))
-    word_list_db = result.scalars().all()
     data = await state.get_data()
-    en_word = data.get("current_word")
-    correct_ru_word = word_list_db.ru  
+    en_word = data.get("current_word_id")
+    result = await session.execute(select(Word). where (Word.id == en_word))
+    word_list_db = result.scalar_one_or_none()
+    user = await get_or_create_user(session, message.from_user.id)
     user_answer = message.text.strip().lower()
-    if user_answer == correct_ru_word:
-        right_words += 1
-        easy_words[en_word] = correct_ru_word
+
+    if word_list_db and user_answer == word_list_db.ru.lower():
+        user.right_answers += 1
         await message.answer('Правильно!', reply_markup=kb.main)
     else:
-        wrong_words += 1
-        hard_words[en_word] = correct_ru_word
-        await message.answer(f'Неправильно, правильный перевод - "{correct_ru_word}"', reply_markup=kb.main)
+        user.wrong_answers += 1
+        await message.answer(f'Неправильно, правильный перевод - "{word_list_db.ru}"', reply_markup=kb.main)
+    await session.commit()
     await state.clear()
 
 @router.message(F.text == 'Список всех слов')
 async def show_word_list(message:Message, session: AsyncSession):
     result = await session.execute(select(Word))
-    word_list_db = result.scalars().all()
-    textik = '\n'.join([f'{key} — {value}' for key, value in word_list_db.items()])
+    words = result.scalars().all()
+    if not words:
+        await message.answer("Список пуст", reply_markup=kb.main)
+        return
+    textik = '\n'.join(f'{word_list_db.en} — {word_list_db.ru}' for word_list_db in words)
     await message.answer(textik, reply_markup=kb.main)
 
 
@@ -91,18 +98,31 @@ async def add_word1(message:Message, state:FSMContext):
 
 @router.message(Add_word.new_word_ru)
 async def add_word2(message:Message, state:FSMContext):
-    await state.update_data(new_word_ru = message.text)
+    await state.update_data(new_word_ru = message.text.strip().lower())
     await state.set_state(Add_word.new_word_en)
-    await message.answer('Введите новое свлово на английском')
+    await message.answer('Введите новое слово на английском')
 
 @router.message(Add_word.new_word_en)
-async def add_word3(message:Message, state:FSMContext):
-    await state.update_data(new_word_en = message.text)
+async def add_word3(message:Message, state:FSMContext, session: AsyncSession):
     data =  await state.get_data()
-    english_new_word = data.get('new_word_en')
+    english_new_word = message.text.strip().lower()
     russian_new_word = data.get('new_word_ru')
-    word_list[english_new_word] = russian_new_word
+
+    telegram_id = message.from_user.id
+    
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    exists = await session.execute(select(Word).where(Word.en == english_new_word))
+    if exists.scalar_one_or_none():
+        await message.answer('Такое слово уже есть в списке!', reply_markup=kb.main)
+        await state.clear()
+        return
+    
+    session.add(Word(en=english_new_word, ru=russian_new_word, user_id=user.id))
+    await session.commit()
     await message.answer('Новое слово успешно добавлено!', reply_markup=kb.main)
+    await state.clear()
+
 
 @router.message(F.text == 'Статистика')
 async def stats(message:Message):
