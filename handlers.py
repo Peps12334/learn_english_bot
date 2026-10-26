@@ -52,7 +52,10 @@ async def start(message:Message, session: AsyncSession):
 
 @router.message(F.text == 'Слово')
 async def word(message:Message, state: FSMContext, session: AsyncSession):
-    result = await session.execute(select(Word))
+    telegram_id = message.from_user.id
+    user_name = await session.execute(select(User.id).where(User.telegram_id == telegram_id))
+    user_id = user_name.scalar_one_or_none()
+    result = await session.execute(select(Word).where(Word.user_id == user_id))
     words = result.scalars().all()
     if not words:
         await message.answer("В базе нет слов. Добавь первое через «Добавить слово».")
@@ -82,7 +85,10 @@ async def users_ans(message:Message, state:FSMContext, session: AsyncSession):
 
 @router.message(F.text == 'Список всех слов')
 async def show_word_list(message:Message, session: AsyncSession):
-    result = await session.execute(select(Word))
+    telegram_id = message.from_user.id
+    user_name = await session.execute(select(User.id).where(User.telegram_id == telegram_id))
+    user_id = user_name.scalar_one_or_none()
+    result = await session.execute(select(Word).where(Word.user_id == user_id))
     words = result.scalars().all()
     if not words:
         await message.answer("Список пуст", reply_markup=kb.main)
@@ -125,6 +131,9 @@ async def add_word3(message:Message, state:FSMContext, session: AsyncSession):
 
 
 @router.message(F.text == 'Статистика')
-async def stats(message:Message):
-    await message.answer(f'Количество правильных ответов: {right_words}\nКоличество неправильных ответов: {wrong_words}\nПроцент верных ответов: {math.trunc(right_words/(right_words+wrong_words)*100)}%', reply_markup=kb.main)
+async def stats(message:Message, session: AsyncSession):
+    telegram_id = message.from_user.id
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    stats = result.scalar_one_or_none()
+    await message.answer(f'Количество правильных ответов: {stats.right_answers}\nКоличество неправильных ответов: {stats.wrong_answers}\nПроцент верных ответов: {math.trunc(stats.right_answers/(stats.right_answers+stats.wrong_answers)*100)}%', reply_markup=kb.main)
     
